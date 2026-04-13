@@ -25,16 +25,14 @@ export default function LoginPage() {
       const { data, error: err } = await supabase.auth.signInWithPassword({ email, password });
       if (err) throw err;
 
-      // Check if onboarding is completed
+      // Login is for existing users — go straight to dashboard
       const { data: profile } = await supabase
         .from("user_profiles")
-        .select("role, onboarding_completed")
+        .select("role")
         .eq("user_id", data.user.id)
         .single();
 
-      if (profile && !profile.onboarding_completed) {
-        router.push("/onboarding");
-      } else if (profile?.role === "client") {
+      if (profile?.role === "client") {
         router.push("/client/leads");
       } else {
         router.push("/agency/dashboard");
