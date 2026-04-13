@@ -9,7 +9,7 @@ export default async function ClientDashboardPage() {
 
   return (
     <>
-      <Topbar title="Dashboard" subtitle="PropNest Realty" />
+      <Topbar title="Dashboard" subtitle="Client overview" />
       <div className="flex-1 overflow-y-auto p-5 space-y-4">
         <div className="grid grid-cols-4 gap-3">
           <MetricCard data={{ label: "Total Leads", value: m.totalLeads.toString(), color: "blue" }} />
