@@ -228,20 +228,25 @@ create index idx_ad_events_platform_time on ad_events(platform, event_time desc)
 -- SEED DATA (dev)
 -- ============================================================================
 
+-- Real estate pilot client
 insert into clients (name, industry, plan, service_areas, wa_phone, qualification_config)
 values (
-  'Demo Company',
-  'general',
+  'PropNest Realty',
+  'real_estate',
   'pro',
-  array['Central', 'East'],
+  array['Central', 'East', 'North-East'],
   '+6580000000',
   '{
     "questions": [
-      {"key": "interest", "text": "What are you interested in?", "type": "text"},
-      {"key": "budget", "text": "What is your budget range?", "type": "list", "options": ["Under $5k", "$5k-$20k", "$20k-$50k", "$50k+"]},
-      {"key": "timeline", "text": "When are you looking to start?", "type": "buttons", "options": ["ASAP", "1-3 months", "Just exploring"]}
+      {"key": "intent", "text": "Are you looking to buy, sell, or rent?", "type": "buttons", "options": ["Buy", "Sell", "Rent"]},
+      {"key": "property_type", "text": "What type of property?", "type": "list", "options": ["HDB", "EC (Executive Condo)", "Private Condo", "Landed", "Commercial"]},
+      {"key": "budget", "text": "What is your budget range?", "type": "list", "options": ["Below $500k", "$500k - $1M", "$1M - $2M", "$2M - $5M", "Above $5M"]},
+      {"key": "location", "text": "Any preferred location or district?", "type": "text"},
+      {"key": "timeline", "text": "When are you looking to move?", "type": "buttons", "options": ["Within 3 months", "3-6 months", "Just exploring"]},
+      {"key": "financing", "text": "Do you have financing in place?", "type": "buttons", "options": ["Yes, pre-approved", "In progress", "Not yet"]}
     ],
-    "qualify_threshold": 55,
-    "hot_threshold": 75
+    "qualify_threshold": 50,
+    "hot_threshold": 70,
+    "disqualify_rules": []
   }'::jsonb
 );

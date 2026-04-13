@@ -7,13 +7,13 @@ import { ContactTable } from "@/components/contacts/ContactTable";
 import { mockMetrics, mockLeads, mockPipelineColumns } from "@/lib/mock-data";
 
 const mockKanbanCards = [
-  { stage: "new", name: "Sarah Tan", subtitle: "Tan Holdings", value: "Pending", initials: "ST", age: "2m ago" },
-  { stage: "new", name: "Lisa Chen", subtitle: "TikTok lead", value: "Pending", initials: "LC", age: "5m ago" },
-  { stage: "qualified", name: "Marcus Lim", subtitle: "Lim & Sons", value: "$28,000", initials: "ML", age: "2h ago" },
-  { stage: "qualified", name: "Priya Nair", subtitle: "Nair Ventures", value: "$18,000", initials: "PN", age: "4h ago" },
-  { stage: "proposal", name: "Alex Koh", subtitle: "StartupBridge", value: "$62,000", initials: "AK", age: "1d ago" },
-  { stage: "negotiation", name: "David Teo", subtitle: "Marina Corp", value: "$45,500", initials: "DT", age: "2d ago" },
-  { stage: "won", name: "James Wong", subtitle: "Wong Properties", value: "$45,000", initials: "JW", age: "Today", won: true },
+  { stage: "new", name: "Rachel Ng", subtitle: "Buyer · East Coast", value: "~$1.5M", initials: "RN", age: "2m ago" },
+  { stage: "new", name: "Vincent Goh", subtitle: "IG lead · New", value: "Pending", initials: "VG", age: "5m ago" },
+  { stage: "qualified", name: "Kevin Tay", subtitle: "Buyer · EC Tengah", value: "$900k", initials: "KT", age: "2h ago" },
+  { stage: "qualified", name: "Amanda Chew", subtitle: "Investor · Condo", value: "$1.2M", initials: "AC", age: "4h ago" },
+  { stage: "proposal", name: "Priya Nair", subtitle: "Investor · Novena", value: "$1.35M", initials: "PN", age: "1d ago" },
+  { stage: "negotiation", name: "Jason Lim", subtitle: "Seller · HDB Bishan", value: "$580k", initials: "JL", age: "2d ago" },
+  { stage: "won", name: "Sarah Lee", subtitle: "Buyer · Landed D10", value: "$4.8M", initials: "SL", age: "6d ago", won: true },
 ];
 
 export default function DashboardPage() {
