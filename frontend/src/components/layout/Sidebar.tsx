@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
@@ -63,6 +64,19 @@ const badgeClass = {
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const [showMenu, setShowMenu] = useState(false);
+
+  async function handleLogout() {
+    try {
+      const { createClient } = await import("@/lib/supabase/client");
+      const supabase = createClient();
+      await supabase.auth.signOut();
+    } catch {
+      // ignore
+    }
+    router.push("/login");
+  }
 
   return (
     <aside className="w-sidebar bg-surface border-r border-border1 flex flex-col flex-shrink-0 overflow-hidden">
@@ -74,9 +88,6 @@ export function Sidebar() {
         <div className="text-[15px] font-bold tracking-tight">
           CRM<span className="text-accent">Platform</span>
         </div>
-        <span className="ml-auto text-[9px] font-semibold bg-accent-light text-accent px-1.5 py-0.5 rounded-full tracking-wider">
-          SG
-        </span>
       </div>
 
       {/* Nav */}
@@ -118,15 +129,49 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* Workspace card */}
-      <div className="m-2 p-2.5 bg-surface2 rounded border border-border1 flex items-center gap-2.5 cursor-pointer">
-        <div className="w-7 h-7 rounded-md bg-accent flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0">
-          KR
-        </div>
-        <div>
-          <div className="text-xs font-semibold">Koi Reno SG</div>
-          <div className="text-[10px] text-ink-3">Pro Plan · 5 seats</div>
-        </div>
+      {/* Account card with logout */}
+      <div className="relative m-2">
+        <button
+          onClick={() => setShowMenu(!showMenu)}
+          className="w-full p-2.5 bg-surface2 rounded border border-border1 flex items-center gap-2.5 cursor-pointer hover:border-accent/50 transition-colors text-left"
+        >
+          <div className="w-7 h-7 rounded-full bg-accent flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0">
+            U
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-xs font-semibold truncate">My Account</div>
+            <div className="text-[10px] text-ink-3">Settings</div>
+          </div>
+          <span className="text-ink-3 text-[10px]">···</span>
+        </button>
+
+        {showMenu && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
+            <div className="absolute bottom-full left-0 right-0 mb-1 z-50 bg-surface border border-border1 rounded-lg shadow-md py-1">
+              <button
+                onClick={() => { setShowMenu(false); router.push("/onboarding"); }}
+                className="w-full text-left px-3 py-2 text-xs text-ink-2 hover:bg-surface2 transition-colors"
+              >
+                Edit qualification questions
+              </button>
+              <button
+                onClick={() => { setShowMenu(false); router.push("/login"); }}
+                className="w-full text-left px-3 py-2 text-xs text-ink-2 hover:bg-surface2 transition-colors"
+              >
+                Switch account
+              </button>
+              <div className="border-t border-border1 mt-1 pt-1">
+                <button
+                  onClick={handleLogout}
+                  className="w-full text-left px-3 py-2 text-xs text-red hover:bg-red-light transition-colors"
+                >
+                  Sign out
+                </button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </aside>
   );
