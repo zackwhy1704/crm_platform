@@ -47,12 +47,13 @@ export default function LoginPage() {
         if (err) throw err;
         setMessage("Check your email for the login link!");
       } else {
-        const { error: err } = await supabase.auth.signInWithPassword({ email, password });
+        const { data: authData, error: err } = await supabase.auth.signInWithPassword({ email, password });
         if (err) throw err;
         // Fetch role and redirect
         const { data: profile } = await supabase
           .from("user_profiles")
           .select("role")
+          .eq("user_id", authData.user.id)
           .single();
         router.push(profile?.role === "client" ? "/client/leads" : "/agency/dashboard");
       }
