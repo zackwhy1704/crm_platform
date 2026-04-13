@@ -1,0 +1,31 @@
+{
+  "source_platform": "meta_facebook",
+  "source_campaign_id": "23859123458",
+  "source_ad_id": "23859001234",
+  "source_form_id": "form_reno_sg_v3",
+  "niche": "renovation",
+  "contact": {
+    "name": "Sarah Tan",
+    "wa_phone": "+6591234567",
+    "email": "sarah@example.com",
+    "wa_optin": true
+  },
+  "form_answers": {
+    "property_type_hint": "HDB 4-room",
+    "area": "Tampines",
+    "budget_hint": "$30,000-$50,000",
+    "timeline_hint": "Within 6 months"
+  },
+  "utm": {
+    "source": "facebook",
+    "medium": "paid",
+    "campaign": "reno_sg_homeowners_apr26",
+    "content": "carousel_kitchen_v2"
+  },
+  "consent": {
+    "contact": true,
+    "storage": true,
+    "share_with_client": true,
+    "timestamp": "2026-04-11T14:23:01Z"
+  }
+}

@@ -1,0 +1,65 @@
+import { Topbar } from "@/components/layout/Topbar";
+import { MetricCard } from "@/components/dashboard/MetricCard";
+import { KanbanBoard } from "@/components/pipeline/KanbanBoard";
+import { LiveQualificationWidget } from "@/components/dashboard/LiveQualificationWidget";
+import { AIActionList } from "@/components/dashboard/AIActionList";
+import { ContactTable } from "@/components/contacts/ContactTable";
+import { mockMetrics, mockLeads, mockPipelineColumns } from "@/lib/mock-data";
+
+const mockKanbanCards = [
+  { stage: "new", name: "Sarah Tan", subtitle: "Tan Holdings", value: "Pending", initials: "ST", age: "2m ago" },
+  { stage: "new", name: "Lisa Chen", subtitle: "TikTok lead", value: "Pending", initials: "LC", age: "5m ago" },
+  { stage: "qualified", name: "Marcus Lim", subtitle: "Lim & Sons", value: "$28,000", initials: "ML", age: "2h ago" },
+  { stage: "qualified", name: "Priya Nair", subtitle: "Nair Ventures", value: "$18,000", initials: "PN", age: "4h ago" },
+  { stage: "proposal", name: "Alex Koh", subtitle: "StartupBridge", value: "$62,000", initials: "AK", age: "1d ago" },
+  { stage: "negotiation", name: "David Teo", subtitle: "Marina Corp", value: "$45,500", initials: "DT", age: "2d ago" },
+  { stage: "won", name: "James Wong", subtitle: "Wong Properties", value: "$45,000", initials: "JW", age: "Today", won: true },
+];
+
+export default function DashboardPage() {
+  return (
+    <>
+      <Topbar title="Dashboard" subtitle="Sat, 11 Apr 2026 · Good morning" />
+      <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
+        {/* Metrics */}
+        <div className="grid grid-cols-4 gap-3">
+          {mockMetrics.map((m) => (
+            <MetricCard key={m.label} data={m} />
+          ))}
+        </div>
+
+        {/* Pipeline + Live + AI Actions */}
+        <div className="grid grid-cols-[2fr_1fr] gap-3.5">
+          <div className="bg-surface border border-border1 rounded-lg shadow-sm">
+            <div className="px-4 pt-3.5 pb-3 border-b border-border1 flex items-center justify-between">
+              <div>
+                <div className="text-[13px] font-bold">Deal Pipeline</div>
+                <div className="text-[11px] text-ink-3 mt-px">22 open deals · $264k total</div>
+              </div>
+              <span className="text-[11px] font-semibold text-accent cursor-pointer hover:underline">
+                Full view →
+              </span>
+            </div>
+            <KanbanBoard columns={mockPipelineColumns} cards={mockKanbanCards} />
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <LiveQualificationWidget />
+            <AIActionList />
+          </div>
+        </div>
+
+        {/* Recent contacts */}
+        <div className="bg-surface border border-border1 rounded-lg shadow-sm">
+          <div className="px-4 pt-3.5 pb-3 border-b border-border1 flex items-center justify-between">
+            <div className="text-[13px] font-bold">Recent Leads</div>
+            <span className="text-[11px] font-semibold text-accent cursor-pointer hover:underline">
+              All contacts →
+            </span>
+          </div>
+          <ContactTable leads={mockLeads} />
+        </div>
+      </div>
+    </>
+  );
+}
