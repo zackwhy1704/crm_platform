@@ -1,25 +1,21 @@
 import { Topbar } from "@/components/layout/Topbar";
 import { MetricCard } from "@/components/dashboard/MetricCard";
+import { getMetrics } from "@/lib/supabase/queries";
 
-const clientMetrics = [
-  { label: "Leads This Month", value: "18", delta: "+5 vs last month", deltaDirection: "up" as const, color: "blue" as const },
-  { label: "In Progress", value: "7", color: "amber" as const },
-  { label: "Won", value: "4", delta: "$68k", color: "green" as const },
-  { label: "Close Rate", value: "57%", delta: "+12pts", deltaDirection: "up" as const, color: "purple" as const },
-];
+export const dynamic = "force-dynamic";
 
-export default function ClientDashboardPage() {
+export default async function ClientDashboardPage() {
+  const m = await getMetrics();
+
   return (
     <>
-      <Topbar title="Dashboard" subtitle="Demo Reno Co · April 2026" />
+      <Topbar title="Dashboard" subtitle="PropNest Realty" />
       <div className="flex-1 overflow-y-auto p-5 space-y-4">
         <div className="grid grid-cols-4 gap-3">
-          {clientMetrics.map((m) => (
-            <MetricCard key={m.label} data={m} />
-          ))}
-        </div>
-        <div className="bg-surface border border-border1 rounded-lg shadow-sm p-6 text-center text-xs text-ink-3">
-          More client-side analytics coming in M3
+          <MetricCard data={{ label: "Total Leads", value: m.totalLeads.toString(), color: "blue" }} />
+          <MetricCard data={{ label: "Qualified", value: m.qualifiedLeads.toString(), color: "green" }} />
+          <MetricCard data={{ label: "Won Deals", value: m.wonDeals.toString(), color: "purple" }} />
+          <MetricCard data={{ label: "New This Week", value: m.newThisWeek.toString(), color: "amber" }} />
         </div>
       </div>
     </>
