@@ -4,15 +4,20 @@ import { type NextRequest, NextResponse } from "next/server";
 /**
  * Auth middleware — protects /agency/* and /client/* routes.
  *
- * If Supabase env vars are not set (local dev), all routes are open.
- * When configured, unauthenticated users are redirected to /login.
- * Clients trying to access /agency/* get redirected to /client/leads.
+ * Set NEXT_PUBLIC_AUTH_ENABLED=true to enforce login.
+ * Default: open access (auth disabled) so the UI is browsable.
  */
 export async function middleware(request: NextRequest) {
+  const authEnabled = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true";
+
+  // Auth disabled — all routes open
+  if (!authEnabled) {
+    return NextResponse.next();
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  // Dev mode — no auth enforcement
   if (!supabaseUrl || !supabaseKey) {
     return NextResponse.next();
   }
@@ -37,12 +42,10 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   const path = request.nextUrl.pathname;
 
-  // Not logged in → redirect to login (except public routes)
   if (!user && (path.startsWith("/agency") || path.startsWith("/client"))) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  // Logged in → check role-based access
   if (user && (path.startsWith("/agency") || path.startsWith("/client"))) {
     const { data: profile } = await supabase
       .from("user_profiles")
@@ -50,7 +53,6 @@ export async function middleware(request: NextRequest) {
       .eq("user_id", user.id)
       .single();
 
-    // Client trying to access agency routes
     if (profile?.role === "client" && path.startsWith("/agency")) {
       return NextResponse.redirect(new URL("/client/leads", request.url));
     }
