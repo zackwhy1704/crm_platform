@@ -22,18 +22,18 @@ export default function HomePage() {
 
         <div className="grid grid-cols-2 gap-3">
           <Link
-            href="/login"
+            href="/signup"
             className="block p-5 rounded-lg border border-accent bg-accent-light hover:bg-accent hover:text-white transition-colors"
           >
-            <div className="font-bold">Sign In</div>
-            <div className="text-xs mt-1 opacity-75">Agency or Client portal</div>
+            <div className="font-bold">Get Started</div>
+            <div className="text-xs mt-1 opacity-75">Create your free account</div>
           </Link>
           <Link
-            href="/agency/dashboard"
+            href="/login"
             className="block p-5 rounded-lg border border-border1 bg-surface hover:border-accent transition-colors"
           >
-            <div className="font-bold">Demo Mode</div>
-            <div className="text-xs text-ink-3 mt-1">Browse with mock data</div>
+            <div className="font-bold">Sign In</div>
+            <div className="text-xs text-ink-3 mt-1">Already have an account</div>
           </Link>
         </div>
 
