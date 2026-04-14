@@ -40,8 +40,11 @@ export function Topbar({ title, subtitle }: { title: string; subtitle?: string }
         <span className="text-[9px] text-ink-3 font-mono border border-border2 rounded px-1">⌘K</span>
       </div>
 
-      <button className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold bg-surface text-ink-2 border border-border1 hover:bg-surface2 hover:text-ink transition-colors">
-        + New Contact
+      <button
+        onClick={() => router.push("/test-lead")}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold bg-accent text-white border border-accent hover:bg-accent-hover transition-colors"
+      >
+        ✨ Test AI Qualification
       </button>
 
       {/* Notifications */}

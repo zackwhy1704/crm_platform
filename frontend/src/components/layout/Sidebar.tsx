@@ -32,6 +32,7 @@ const agencyNav: NavSection[] = [
   {
     title: "AI Qualification",
     items: [
+      { label: "Test Lead Flow", href: "/test-lead", icon: "✨" },
       { label: "AI Calls", href: "/agency/calls", icon: "☎", badge: { count: 1, color: "red" } },
     ],
   },
