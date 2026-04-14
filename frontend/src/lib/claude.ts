@@ -75,7 +75,9 @@ const SG_LOCATIONS = [
 
 // ---------------------------------------------------------------------------
 // STRICT: exact option match for buttons/list questions.
-// No Claude mapping — if user's text doesn't match, re-ask.
+// No Claude mapping, no fuzzy matching — user must either tap the button
+// OR type the exact option label (case-insensitive, whitespace-trimmed).
+// Anything else gets re-asked.
 // ---------------------------------------------------------------------------
 export function validateStrictOptions(
   userAnswer: string,
@@ -83,18 +85,27 @@ export function validateStrictOptions(
   question: string,
 ): ValidationResult {
   const trimmed = userAnswer.trim();
+  console.log(`[validateStrictOptions] answer="${trimmed}" options=${JSON.stringify(options)}`);
+
   if (!trimmed) {
+    console.log("[validateStrictOptions] empty → INVALID");
     return { valid: false, reask: reaskWithOptions(question, options) };
   }
+
   // Case-insensitive exact match only
   const match = options.find((o) => o.toLowerCase() === trimmed.toLowerCase());
-  if (match) return { valid: true, normalised: match };
+  if (match) {
+    console.log(`[validateStrictOptions] matched "${match}" → VALID`);
+    return { valid: true, normalised: match };
+  }
 
+  console.log(`[validateStrictOptions] no match for "${trimmed}" → INVALID, re-asking`);
   return { valid: false, reask: reaskWithOptions(question, options) };
 }
 
 function reaskWithOptions(question: string, options: string[]): string {
-  return `Please tap one of the options below: ${options.join(", ")}.`;
+  const optList = options.map((o) => `• ${o}`).join("\n");
+  return `Sorry, I can only accept one of these options:\n\n${optList}\n\nPlease tap one of the buttons or type the exact option.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -240,12 +251,16 @@ export async function validateAnswer(
   options?: string[],
   questionKey?: string,
 ): Promise<ValidationResult> {
-  // Buttons/list: strict match only
+  console.log(`[validateAnswer] key="${questionKey}" hasOptions=${options && options.length > 0} answer="${userAnswer}"`);
+
+  // PRIORITY 1: Any question with a fixed set of options → STRICT match.
+  // Applies to ALL buttons/list questions regardless of topic.
   if (options && options.length > 0) {
+    console.log(`[validateAnswer] routing to strict options validator (${options.length} options)`);
     return validateStrictOptions(userAnswer, options, question);
   }
 
-  // Location-specific questions: validate SG area
+  // PRIORITY 2: Location-specific free-text question → Singapore validator
   const lowerKey = (questionKey ?? "").toLowerCase();
   const lowerQ = question.toLowerCase();
   if (
@@ -256,9 +271,11 @@ export async function validateAnswer(
     lowerQ.includes("district") ||
     lowerQ.includes("which area")
   ) {
+    console.log("[validateAnswer] routing to location validator");
     return validateLocation(question, userAnswer);
   }
 
-  // Generic free-text
+  // PRIORITY 3: Generic free-text → ReAct validator
+  console.log("[validateAnswer] routing to generic free-text validator");
   return validateFreeText(question, userAnswer);
 }
