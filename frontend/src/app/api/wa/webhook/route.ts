@@ -1,104 +1,76 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
-import { sendNextQuestion, computeScore, scoreToVerdict } from "@/lib/qualification";
 import { sendText } from "@/lib/whatsapp";
+import { sendNextQuestion, computeScore, scoreToVerdict } from "@/lib/qualification";
+import { validateAnswer } from "@/lib/claude";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
 );
 
-/**
- * GET /api/wa/webhook — WhatsApp webhook verification (Meta sends this on setup).
- */
+/** GET — webhook verification */
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const mode = url.searchParams.get("hub.mode");
   const token = url.searchParams.get("hub.verify_token");
   const challenge = url.searchParams.get("hub.challenge");
-
   if (mode === "subscribe" && token === process.env.WHATSAPP_VERIFY_TOKEN) {
     return new Response(challenge ?? "ok", { status: 200 });
   }
-
   return new Response("Forbidden", { status: 403 });
 }
 
-/**
- * POST /api/wa/webhook — Incoming WhatsApp messages.
- * Extracts the message, looks up the lead, advances the qualification state machine.
- */
+/** POST — incoming WA message handler */
 export async function POST(request: Request) {
   try {
     const payload = await request.json();
+    const message = payload?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
+    if (!message) return NextResponse.json({ status: "ok" });
 
-    // Extract message from Meta's nested payload
-    const entry = payload?.entry?.[0];
-    const changes = entry?.changes?.[0];
-    const value = changes?.value;
-    const message = value?.messages?.[0];
-
-    if (!message) {
-      // Could be a status update (delivered, read) — acknowledge
-      return NextResponse.json({ status: "ok" });
-    }
-
-    const from = message.from; // phone number like "6591234567"
+    const from = message.from;
     const phone = from.startsWith("+") ? from : `+${from}`;
 
-    // Extract reply text
     let replyText = "";
-    if (message.type === "text") {
-      replyText = message.text?.body ?? "";
-    } else if (message.type === "interactive") {
-      if (message.interactive?.type === "button_reply") {
-        replyText = message.interactive.button_reply.title ?? "";
-      } else if (message.interactive?.type === "list_reply") {
-        replyText = message.interactive.list_reply.title ?? "";
-      }
+    if (message.type === "text") replyText = message.text?.body ?? "";
+    else if (message.type === "interactive") {
+      if (message.interactive?.type === "button_reply") replyText = message.interactive.button_reply.title ?? "";
+      else if (message.interactive?.type === "list_reply") replyText = message.interactive.list_reply.title ?? "";
     }
 
-    if (!replyText) {
-      return NextResponse.json({ status: "no_text" });
-    }
+    if (!replyText) return NextResponse.json({ status: "no_text" });
 
-    console.log(`WA reply from ${phone}: "${replyText}"`);
+    console.log(`[webhook] reply from ${phone}: "${replyText}"`);
 
-    // Find lead by phone
-    const { data: contact } = await supabase
-      .from("lead_contacts")
-      .select("lead_id")
-      .eq("wa_phone", phone)
-      .single();
-
+    // Find lead
+    let { data: contact } = await supabase.from("lead_contacts").select("lead_id").eq("wa_phone", phone).single();
     if (!contact) {
-      // Try without + prefix
-      const { data: contact2 } = await supabase
-        .from("lead_contacts")
-        .select("lead_id")
-        .eq("wa_phone", from)
-        .single();
-
-      if (!contact2) {
-        console.log("No lead found for phone:", phone);
-        return NextResponse.json({ status: "no_lead" });
-      }
-      // Fall through with contact2
-      return await processReply(contact2.lead_id, phone, replyText);
+      const { data: c2 } = await supabase.from("lead_contacts").select("lead_id").eq("wa_phone", from).single();
+      contact = c2;
+    }
+    if (!contact) {
+      console.log("[webhook] no lead for phone:", phone);
+      return NextResponse.json({ status: "no_lead" });
     }
 
-    return await processReply(contact.lead_id, phone, replyText);
+    return await processReply(contact.lead_id, from, replyText, message.type);
   } catch (err) {
-    console.error("WA webhook error:", err);
-    return NextResponse.json({ status: "error" }, { status: 200 }); // Always 200 to Meta
+    console.error("[webhook] error:", err);
+    return NextResponse.json({ status: "error" }, { status: 200 });
   }
 }
 
-async function processReply(leadId: string, phone: string, replyText: string) {
-  // Get session
+async function processReply(leadId: string, phoneForMeta: string, replyText: string, messageType: string) {
+  // Always log the inbound message
+  await supabase.from("wa_messages").insert({
+    lead_id: leadId, direction: "inbound", sender_type: "lead",
+    message_type: messageType === "text" ? "text" : "interactive_button",
+    content: { body: replyText },
+  });
+
   const { data: session } = await supabase
     .from("wa_sessions")
-    .select("current_step, collected, state")
+    .select("state, current_step, collected")
     .eq("lead_id", leadId)
     .single();
 
@@ -106,98 +78,135 @@ async function processReply(leadId: string, phone: string, replyText: string) {
     return NextResponse.json({ status: "session_complete" });
   }
 
-  // Get qualification config
-  const { data: client } = await supabase
-    .from("clients")
-    .select("qualification_config")
-    .limit(1)
-    .single();
-
-  const config = client?.qualification_config ?? { questions: [], qualify_threshold: 50, hot_threshold: 70 };
+  const { data: client } = await supabase.from("clients").select("qualification_config").limit(1).single();
+  const config = client?.qualification_config ?? {
+    questions: [{ key: "interest", text: "What are you looking for?", type: "text" }],
+    qualify_threshold: 50, hot_threshold: 70,
+  };
   const questions = config.questions ?? [];
 
-  // Store the reply
-  const prevStep = session.current_step - 1; // current_step is the next question to send; prevStep is what they just answered
-  const questionKey = prevStep >= 0 && prevStep < questions.length ? questions[prevStep].key : `step_${prevStep}`;
-  const collected = { ...(session.collected as Record<string, string>), [questionKey]: replyText };
+  // BRANCH 1: First reply after template — open the flow
+  if (session.state === "new") {
+    console.log("[webhook] first reply received, starting qualification");
 
-  // Log inbound message
-  await supabase.from("wa_messages").insert({
-    lead_id: leadId,
-    direction: "inbound",
-    sender_type: "lead",
-    message_type: "text",
-    content: { body: replyText },
-  });
+    const { data: contactRow } = await supabase.from("lead_contacts").select("name").eq("lead_id", leadId).single();
+    const leadName = contactRow?.name ?? "there";
 
-  // Check if more questions remain
+    // Welcome
+    const welcome = `Hi ${leadName}! Thanks for your reply. I'm Ava, your AI assistant. Let me ask a few quick questions to match you with the right person.`;
+    const welcomeResult = await sendText(phoneForMeta, welcome);
+    if (welcomeResult.ok) {
+      await supabase.from("wa_messages").insert({
+        lead_id: leadId, direction: "outbound", sender_type: "ai",
+        message_type: "text", content: { body: welcome },
+      });
+    }
+
+    // Small delay, then first question
+    await new Promise((r) => setTimeout(r, 500));
+    const qResult = await sendNextQuestion(phoneForMeta, config, 0);
+    const q = questions[0];
+    if (q) {
+      await supabase.from("wa_messages").insert({
+        lead_id: leadId, direction: "outbound", sender_type: "ai",
+        message_type: q.type === "text" ? "text" : q.type === "buttons" ? "interactive_button" : "interactive_list",
+        content: { body: q.text },
+      });
+    }
+
+    await supabase.from("wa_sessions").update({
+      state: "qualifying", current_step: 1, turn_count: 1,
+      last_activity_at: new Date().toISOString(),
+    }).eq("lead_id", leadId);
+
+    if (!qResult.ok) console.error("[webhook] Q1 failed:", qResult.error);
+    return NextResponse.json({ status: "qualification_started" });
+  }
+
+  // BRANCH 2: Ongoing qualification — user is answering question N
+  const prevStep = session.current_step - 1; // step the user just answered
+  if (prevStep < 0 || prevStep >= questions.length) {
+    return NextResponse.json({ status: "no_question_to_answer" });
+  }
+
+  const answeredQuestion = questions[prevStep];
+  let finalAnswer = replyText;
+
+  // ReAct GUARDRAIL: validate text answers with Claude Haiku
+  // (Buttons/list replies don't need validation — they're structured)
+  if (answeredQuestion.type === "text") {
+    console.log("[webhook] validating text answer via ReAct...");
+    const validation = await validateAnswer(answeredQuestion.text, replyText);
+
+    if (!validation.valid) {
+      console.log("[webhook] answer invalid, re-asking");
+      // Re-ask — don't advance the state machine
+      await sendText(phoneForMeta, validation.reask);
+      await supabase.from("wa_messages").insert({
+        lead_id: leadId, direction: "outbound", sender_type: "ai",
+        message_type: "text", content: { body: validation.reask },
+      });
+      await supabase.from("wa_sessions").update({
+        last_activity_at: new Date().toISOString(),
+      }).eq("lead_id", leadId);
+      return NextResponse.json({ status: "reask" });
+    }
+
+    finalAnswer = validation.normalised;
+    console.log("[webhook] answer valid, normalised to:", finalAnswer);
+  }
+
+  // Store the validated answer
+  const collected = { ...(session.collected as Record<string, string>), [answeredQuestion.key]: finalAnswer };
+
   if (session.current_step < questions.length) {
     // Send next question
     const nextStep = session.current_step;
-    await sendNextQuestion(phone, config, nextStep);
-
-    // Log outbound
+    const qResult = await sendNextQuestion(phoneForMeta, config, nextStep);
     const q = questions[nextStep];
+
     await supabase.from("wa_messages").insert({
-      lead_id: leadId,
-      direction: "outbound",
-      sender_type: "ai",
+      lead_id: leadId, direction: "outbound", sender_type: "ai",
       message_type: q.type === "text" ? "text" : q.type === "buttons" ? "interactive_button" : "interactive_list",
       content: { body: q.text },
     });
 
-    // Update session
     await supabase.from("wa_sessions").update({
-      current_step: nextStep + 1,
-      collected,
+      current_step: nextStep + 1, collected,
       turn_count: (session.current_step ?? 0) + 1,
       last_activity_at: new Date().toISOString(),
     }).eq("lead_id", leadId);
+
+    if (!qResult.ok) console.error("[webhook] next Q failed:", qResult.error);
   } else {
     // All questions answered — compute score and close
     const score = computeScore(collected, config);
     const verdict = scoreToVerdict(score, config);
+    const summary = Object.entries(collected).map(([k, v]) => `${k}: ${v}`).join(". ") + ".";
 
-    // Generate summary
-    const summaryParts = Object.entries(collected).map(([k, v]) => `${k}: ${v}`);
-    const summary = summaryParts.join(". ") + `.`;
-
-    // Update lead
     await supabase.from("leads").update({
-      status: verdict,
-      ai_score: score,
-      ai_verdict: verdict,
-      ai_summary: summary,
+      status: verdict, ai_score: score, ai_verdict: verdict, ai_summary: summary,
       qualified_at: new Date().toISOString(),
     }).eq("id", leadId);
 
-    // Update session
     await supabase.from("wa_sessions").update({
-      state: "complete",
-      collected,
-      completed_at: new Date().toISOString(),
+      state: "complete", collected, completed_at: new Date().toISOString(),
     }).eq("lead_id", leadId);
 
-    // Store form answers
     await supabase.from("lead_form_answers").upsert({ lead_id: leadId, answers: collected });
 
-    // Send closing message
-    const closingMsg = score >= config.hot_threshold
-      ? "Thanks! You're a great match. Our specialist will reach out to you within the hour."
-      : score >= config.qualify_threshold
-        ? "Thanks for your answers! Our team will review and get back to you shortly."
-        : "Thanks for sharing! We'll keep you updated with relevant opportunities.";
+    const closingMsg =
+      score >= config.hot_threshold ? "Thanks! You're a great match. Our specialist will reach out to you within the hour."
+      : score >= config.qualify_threshold ? "Thanks for your answers! Our team will review and get back to you shortly."
+      : "Thanks for sharing! We'll keep you updated with relevant opportunities.";
 
-    await sendText(phone, closingMsg);
+    await sendText(phoneForMeta, closingMsg);
     await supabase.from("wa_messages").insert({
-      lead_id: leadId,
-      direction: "outbound",
-      sender_type: "ai",
-      message_type: "text",
-      content: { body: closingMsg },
+      lead_id: leadId, direction: "outbound", sender_type: "ai",
+      message_type: "text", content: { body: closingMsg },
     });
 
-    console.log(`Lead ${leadId} qualified: score=${score} verdict=${verdict}`);
+    console.log(`[webhook] lead ${leadId} qualified: score=${score}, verdict=${verdict}`);
   }
 
   return NextResponse.json({ status: "processed" });

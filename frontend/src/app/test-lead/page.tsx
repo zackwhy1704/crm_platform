@@ -95,12 +95,16 @@ export default function TestLeadPage() {
             <div className="text-[11px] font-bold text-ink-2 mb-2">How the flow works:</div>
             <ol className="text-[11px] text-ink-3 space-y-1.5 list-decimal list-inside">
               <li>You submit your number above</li>
-              <li>AI sends a welcome message on WhatsApp</li>
-              <li>AI sends the first qualification question (buttons/list)</li>
-              <li>You reply by tapping a button or typing</li>
-              <li>AI receives your reply, sends the next question</li>
-              <li>After all questions, AI scores you and updates the lead in the dashboard</li>
+              <li>AI sends you a <strong>hello_world template</strong> on WhatsApp</li>
+              <li><strong>You reply anything</strong> (e.g. &quot;Hi&quot;) to open the chat window</li>
+              <li>AI sends welcome + first qualification question (buttons/list)</li>
+              <li>You reply → AI validates with Claude Haiku → sends next question</li>
+              <li>If your answer is off-topic or gibberish, AI re-asks politely</li>
+              <li>After all questions, AI scores you and updates the dashboard</li>
             </ol>
+            <div className="mt-3 text-[10px] text-amber bg-amber-light/50 rounded px-2 py-1.5 border border-amber/20">
+              ⚠ WhatsApp rule: free-form messages only work after you reply to the template. This is a Meta restriction for test numbers.
+            </div>
           </div>
         </div>
       </div>
