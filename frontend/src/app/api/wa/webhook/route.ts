@@ -143,7 +143,8 @@ async function processReply(leadId: string, phoneForMeta: string, replyText: str
     const validation = await validateAnswer(
       answeredQuestion.text,
       replyText,
-      answeredQuestion.options, // pass options for buttons/list — claude will map free text to one
+      answeredQuestion.options,  // strict match against options for buttons/list
+      answeredQuestion.key,       // used to route to location validator when key=location
     );
 
     if (!validation.valid) {
