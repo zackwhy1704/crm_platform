@@ -1,8 +1,7 @@
 /**
  * Qualification engine — runs the WA conversation loop.
- * Reads qualification_config from the client record, sends questions one by one.
  */
-import { sendText, sendButtons, sendList } from "./whatsapp";
+import { sendText, sendButtons, sendList, type SendResult } from "./whatsapp";
 
 type Question = {
   key: string;
@@ -17,48 +16,34 @@ type QualConfig = {
   hot_threshold: number;
 };
 
-/**
- * Send the next qualification question based on current step.
- * Returns the step number that was just sent, or -1 if qualification is complete.
- */
 export async function sendNextQuestion(
   phone: string,
   config: QualConfig,
   currentStep: number,
-): Promise<number> {
+): Promise<SendResult> {
   const questions = config.questions ?? [];
 
   if (currentStep >= questions.length) {
-    // All questions asked — send closing message
-    await sendText(phone, "Thanks for answering! Our team will review your answers and get back to you shortly.");
-    return -1;
+    return sendText(phone, "Thanks for answering! Our team will review and get back to you shortly.");
   }
 
   const q = questions[currentStep];
 
   if (q.type === "buttons" && q.options && q.options.length > 0) {
-    await sendButtons(
-      phone,
-      q.text,
+    return sendButtons(
+      phone, q.text,
       q.options.map((opt, i) => ({ id: `${q.key}_${i}`, title: opt })),
     );
-  } else if (q.type === "list" && q.options && q.options.length > 0) {
-    await sendList(
-      phone,
-      q.text,
-      "Select",
-      q.options.map((opt, i) => ({ id: `${q.key}_${i}`, title: opt })),
-    );
-  } else {
-    await sendText(phone, q.text);
   }
-
-  return currentStep;
+  if (q.type === "list" && q.options && q.options.length > 0) {
+    return sendList(
+      phone, q.text, "Select",
+      q.options.map((opt, i) => ({ id: `${q.key}_${i}`, title: opt })),
+    );
+  }
+  return sendText(phone, q.text);
 }
 
-/**
- * Compute a score from collected answers.
- */
 export function computeScore(collected: Record<string, string>, config: QualConfig): number {
   const questions = config.questions ?? [];
   if (questions.length === 0) return 50;
@@ -66,7 +51,6 @@ export function computeScore(collected: Record<string, string>, config: QualConf
   const answered = Object.keys(collected).length;
   const completion = Math.round((answered / questions.length) * 50);
 
-  // Simple quality signal: longer answers or specific keywords = higher
   let quality = 0;
   for (const val of Object.values(collected)) {
     const lower = val.toLowerCase();
