@@ -1,6 +1,6 @@
 /**
  * Claude Haiku helper — server-side only.
- * Used for ReAct-style validation of free-text qualification answers.
+ * Used for ReAct-style validation of qualification answers.
  */
 
 const ANTHROPIC_API = "https://api.anthropic.com/v1/messages";
@@ -48,52 +48,102 @@ async function callClaude(
   }
 }
 
+type ValidationResult =
+  | { valid: true; normalised: string }
+  | { valid: false; reask: string };
+
 /**
- * ReAct-style validation of a free-text answer.
+ * Validate any qualification answer using the ReAct framework.
  *
- * Reasoning (Thought): Claude evaluates whether the input is a plausible,
- * on-topic answer to the question asked.
- * Action: Either accepts the answer (returns it normalised) or rejects with
- * a polite re-ask prompt for the user.
+ * THOUGHT: Is the answer plausible + on-topic?
+ *   - If question has options (buttons/list), does it match or map to one?
+ *   - If free-text, is it gibberish/evasive/off-topic?
+ * ACTION: Accept with normalised value, or reject with re-ask message.
  *
- * Returns:
- *   { valid: true, normalised: string }  — answer is good, use this value
- *   { valid: false, reask: string }      — send this re-ask message to the user
+ * Fail-open: if Claude fails, accept the answer (don't block the flow).
  */
 export async function validateAnswer(
   question: string,
   userAnswer: string,
-): Promise<{ valid: true; normalised: string } | { valid: false; reask: string }> {
-  // Skip validation for very obviously valid short answers
+  options?: string[],
+): Promise<ValidationResult> {
   const trimmed = userAnswer.trim();
   if (trimmed.length === 0) {
-    return { valid: false, reask: "I didn't catch that — could you try again? " + question };
+    return { valid: false, reask: `I didn't catch that — could you try again? ${question}` };
   }
 
-  const system = `You are a validation agent for a CRM lead qualification system. Your job is to determine whether a user's answer is a plausible, on-topic response to the question asked.
+  let system: string;
+  let userPrompt: string;
+
+  if (options && options.length > 0) {
+    // Structured question — user's answer must map to one of the options
+    system = `You are a validation agent for a CRM lead qualification system. A question has been asked with a fixed set of allowed answers. The user replied with free-form text instead of tapping a button.
 
 Use the ReAct framework:
-1. THOUGHT: Reason about whether the answer makes sense for the question. Consider:
-   - Is it on-topic?
-   - Is it gibberish (random letters, single characters, nonsense)?
-   - Is it an evasion ("idk", "whatever", "none of your business")?
-   - Is it clearly off-topic (asking something back, unrelated statement)?
-   - Short but valid answers ARE OK (e.g. "Tampines" for location, "3 months" for timeline)
-2. ACTION: Output one of two verdicts.
+1. THOUGHT: Reason whether the user's answer clearly maps to ONE of the allowed options.
+   - Exact match or close synonym → VALID
+   - Clear intent (e.g. "buying" → "Buy", "looking to purchase" → "Buy") → VALID
+   - Gibberish (random letters, nonsense) → INVALID
+   - Evasion ("idk", "whatever", "none") → INVALID
+   - Ambiguous or off-topic → INVALID
+2. ACTION: Output one of two formats with NO other text.
 
-Respond with EXACTLY one of these two formats (no other text):
+Respond with EXACTLY one of:
+
+VALID: <the exact allowed option it maps to>
+
+or
+
+INVALID: <one-sentence friendly re-ask that lists the options>
+
+Examples:
+
+Question: "Are you looking to buy, sell, or rent?"
+Options: ["Buy", "Sell", "Rent"]
+Answer: "buying"
+→ VALID: Buy
+
+Question: "Are you looking to buy, sell, or rent?"
+Options: ["Buy", "Sell", "Rent"]
+Answer: "fddsds"
+→ INVALID: I didn't catch that — could you let me know if you're looking to Buy, Sell, or Rent?
+
+Question: "What type of property?"
+Options: ["HDB", "EC", "Private Condo", "Landed", "Commercial"]
+Answer: "4 room hdb"
+→ VALID: HDB
+
+Question: "What type of property?"
+Options: ["HDB", "EC", "Private Condo", "Landed", "Commercial"]
+Answer: "something nice"
+→ INVALID: Could you pick one: HDB, EC, Private Condo, Landed, or Commercial?`;
+
+    userPrompt = `Question: "${question}"\nAllowed options: ${options.join(", ")}\nUser answer: "${userAnswer}"`;
+  } else {
+    // Free-text question — validate it's on-topic and sensible
+    system = `You are a validation agent for a CRM lead qualification system. Determine whether a user's free-text answer is a plausible, on-topic response.
+
+Use the ReAct framework:
+1. THOUGHT: Reason about whether the answer makes sense for the question.
+   - On-topic ? short but relevant answers are fine (e.g. "Tampines", "3 months")
+   - Gibberish (random letters) → INVALID
+   - Evasion ("idk", "whatever") → INVALID
+   - Off-topic (asking something back, unrelated) → INVALID
+2. ACTION: Output one of two formats with NO other text.
+
+Respond with EXACTLY one of:
 
 VALID: <cleaned/normalised version of the answer>
 
 or
 
-INVALID: <one-sentence friendly re-ask that references what was unclear and repeats the question>
+INVALID: <one-sentence friendly re-ask that repeats the question>
 
 Examples:
 
-Question: "What is your budget range?"
-Answer: "around 500k to 1 million"
-→ VALID: $500k - $1M
+Question: "What is your preferred location?"
+Answer: "East Coast District 15"
+→ VALID: East Coast District 15
 
 Question: "What is your preferred location?"
 Answer: "asdfghjkl"
@@ -101,18 +151,15 @@ Answer: "asdfghjkl"
 
 Question: "When are you looking to move?"
 Answer: "idk"
-→ INVALID: No worries if you're unsure — a rough estimate works. When are you hoping to move?
+→ INVALID: No worries if you're unsure — a rough estimate works. When are you hoping to move?`;
 
-Question: "What is your preferred location?"
-Answer: "East Coast District 15"
-→ VALID: East Coast District 15`;
-
-  const userPrompt = `Question: "${question}"\nAnswer: "${userAnswer}"`;
+    userPrompt = `Question: "${question}"\nAnswer: "${userAnswer}"`;
+  }
 
   const response = await callClaude(system, [{ role: "user", content: userPrompt }], 200);
 
   if (!response) {
-    // If Claude fails, fall back to accepting the answer (fail-open)
+    // Fail-open
     return { valid: true, normalised: trimmed };
   }
 
@@ -126,6 +173,5 @@ Answer: "East Coast District 15"
     return { valid: false, reask: reask || `Could you try again? ${question}` };
   }
 
-  // Unexpected response — fail-open
   return { valid: true, normalised: trimmed };
 }

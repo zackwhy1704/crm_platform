@@ -132,20 +132,32 @@ async function processReply(leadId: string, phoneForMeta: string, replyText: str
   const answeredQuestion = questions[prevStep];
   let finalAnswer = replyText;
 
-  // ReAct GUARDRAIL: validate text answers with Claude Haiku
-  // (Buttons/list replies don't need validation — they're structured)
-  if (answeredQuestion.type === "text") {
-    console.log("[webhook] validating text answer via ReAct...");
-    const validation = await validateAnswer(answeredQuestion.text, replyText);
+  // ReAct GUARDRAIL — runs on EVERY free-text reply, including when the user
+  // types instead of tapping a button/list option. Only skipped for genuine
+  // interactive taps (button_reply / list_reply) since those are already
+  // structured values from WA.
+  const isInteractiveTap = messageType === "interactive";
+
+  if (!isInteractiveTap) {
+    console.log(`[webhook] validating ${answeredQuestion.type} answer via ReAct:`, replyText);
+    const validation = await validateAnswer(
+      answeredQuestion.text,
+      replyText,
+      answeredQuestion.options, // pass options for buttons/list — claude will map free text to one
+    );
 
     if (!validation.valid) {
-      console.log("[webhook] answer invalid, re-asking");
-      // Re-ask — don't advance the state machine
+      console.log("[webhook] answer INVALID, re-asking:", validation.reask);
       await sendText(phoneForMeta, validation.reask);
       await supabase.from("wa_messages").insert({
         lead_id: leadId, direction: "outbound", sender_type: "ai",
         message_type: "text", content: { body: validation.reask },
       });
+      // If it's a buttons/list question, re-send the interactive prompt too
+      if (answeredQuestion.type !== "text") {
+        await new Promise((r) => setTimeout(r, 400));
+        await sendNextQuestion(phoneForMeta, config, prevStep);
+      }
       await supabase.from("wa_sessions").update({
         last_activity_at: new Date().toISOString(),
       }).eq("lead_id", leadId);
